@@ -11,7 +11,10 @@ import Foundation
 /// Class wrapping around TCP/IPv6 socket
 public final class TCPSocket {
     /// The file descriptor number for socket
-    let fileDescriptor: Int32
+    private(set) var fileDescriptor: Int32
+    public var isConnectionClosed: Bool {
+        fileDescriptor == -1
+    }
 
     /// Whether is this socket in block mode or not
     var blocking: Bool {
@@ -203,6 +206,7 @@ public final class TCPSocket {
     func close() {
         _ = SystemLibrary.shutdown(fileDescriptor, Int32(SHUT_WR))
         _ = SystemLibrary.close(fileDescriptor)
+        fileDescriptor = -1
     }
 
     func getPeerName() throws -> (String, Int) {
