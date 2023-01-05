@@ -52,10 +52,24 @@ public final class DefaultHTTPServer: HTTPServer {
         acceptSocket = try TCPSocket()
         try acceptSocket.bind(port: port, interface: interface)
         try acceptSocket.listen()
+
+        var shouldRetryServerStart: Bool = true
+        var retryCount: Int = 0
+        var maximumReattempts: Int = 3
         eventLoop.setReader(acceptSocket.fileDescriptor) { [unowned self] in
-            self.handleNewConnection()
+            let wasNewConnectionSuccessful: Bool = self.handleNewConnection()
+            if wasNewConnectionSuccessful == false || retryCount >= maximumReattempts {
+                retryCount += 1
+                shouldRetryServerStart = true
+            } else {
+                logger.info("HTTP server running")
+                shouldRetryServerStart = false
+            }
         }
-        logger.info("HTTP server running")
+
+        if shouldRetryServerStart == true {
+            try start()
+        }
     }
 
     public func stop() {
@@ -82,7 +96,15 @@ public final class DefaultHTTPServer: HTTPServer {
     }
 
     // called to handle new connections
-    private func handleNewConnection() {
+    /// Attempts to handle new connections to the socket, if active.
+    /// - Returns: A boolean indicating that the new connection was added successfully
+    private func handleNewConnection() -> Bool {
+        // Ensure the connection is still open before we try to do anything else
+        guard !acceptSocket.isConnectionClosed else {
+            acceptSocket = nil
+            return false
+        }
+
         let clientSocket = try! acceptSocket.accept()
         let (address, port) = try! clientSocket.getPeerName()
         let transport = Transport(socket: clientSocket, eventLoop: eventLoop)
@@ -99,6 +121,7 @@ public final class DefaultHTTPServer: HTTPServer {
             self.connections.remove(connection)
         }
         logger.info("New connection \(connection.uuid) from [\(address)]:\(port)")
+        return true
     }
 
     private func appForConnection(
