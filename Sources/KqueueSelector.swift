@@ -19,6 +19,7 @@ public final class KqueueSelector: Selector {
     private let selectMaximumEvent: Int
     private let kqueue: Int32
     private var fileDescriptorMap: [Int32: SelectorKey] = [:]
+    private let logger = DefaultLogger()
 
     public init(selectMaximumEvent: Int = 1024) throws {
         kqueue = Darwin.kqueue()
@@ -102,11 +103,14 @@ public final class KqueueSelector: Selector {
         }
 
         // unregister events from kqueue
-        guard kevents.withUnsafeMutableBufferPointer({ pointer in
-            kevent(kqueue, pointer.baseAddress, Int32(pointer.count), nil, Int32(0), nil) >= 0
-        }) else {
-            throw OSError.lastIOError()
-        }
+        kevents.withUnsafeMutableBufferPointer({ pointer in
+            let result: Int32 = kevent(kqueue, pointer.baseAddress, Int32(pointer.count), nil, Int32(0), nil)
+            if !(result >= 0) {
+                logger.error("Non-fatal error: Was the file descriptor already de-initialised?")
+                logger.error(OSError.lastIOError().localizedDescription)
+            }
+        })
+
         return key
     }
 
